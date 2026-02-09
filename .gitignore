@@ -1,0 +1,12 @@
+/docs/
+/lib/
+/bin/
+/.shards/
+*.dwarf
+
+# WASM build output
+*.wasm
+
+# Editor
+.idea/
+.vscode/
