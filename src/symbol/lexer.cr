@@ -41,8 +41,14 @@ module SYMBOL
     Drop        # ↓
     Reverse     # ⌽
 
+    # Assignment
+    Assign      # =
+
     # Range
     Range       # ..
+
+    # Statement separator
+    Period      # .
 
     # Structural operators
     Concat      # ><
@@ -144,7 +150,7 @@ module SYMBOL
           advance
           Token.new(TokenType::Equals, "==", @line, start_col)
         else
-          Token.new(TokenType::Equals, "=", @line, start_col)
+          Token.new(TokenType::Assign, "=", @line, start_col)
         end
       when '!'
         if peek == '='
@@ -236,7 +242,7 @@ module SYMBOL
           advance
           Token.new(TokenType::Range, "..", @line, start_col)
         else
-          Token.new(TokenType::Error, "Unexpected character: .", @line, start_col)
+          Token.new(TokenType::Period, ".", @line, start_col)
         end
       when '"'
         string(start_col)
@@ -276,10 +282,18 @@ module SYMBOL
     end
 
     private def number(first : Char, start_col : Int32) : Token
+      has_dot = false
       value = String.build do |str|
         str << first
-        while !at_end? && (peek.ascii_number? || peek == '.')
-          str << advance
+        while !at_end?
+          if peek.ascii_number?
+            str << advance
+          elsif peek == '.' && !has_dot && peek_next.ascii_number?
+            has_dot = true
+            str << advance
+          else
+            break
+          end
         end
       end
       Token.new(TokenType::Number, value, @line, start_col)

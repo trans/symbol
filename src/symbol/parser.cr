@@ -39,7 +39,11 @@ module SYMBOL
       case tok.type
       when TokenType::Number
         advance
-        AST::ExprLiteral.new(tok.value.to_f64)
+        if tok.value.includes?('.')
+          AST::ExprLiteral.new(tok.value.to_f64)
+        else
+          AST::ExprLiteral.new(tok.value.to_i64)
+        end
 
       when TokenType::String
         advance
@@ -87,7 +91,13 @@ module SYMBOL
 
       when TokenType::Equals
         advance
-        AST::ExprOperator.new("=", 2)
+        AST::ExprOperator.new("==", 2)
+
+      when TokenType::Assign
+        raise ParseError.new("Assignment '=' not allowed in expression context", tok.line, tok.column)
+
+      when TokenType::Period
+        raise ParseError.new("Unexpected '.'", tok.line, tok.column)
 
       when TokenType::NotEq, TokenType::NotEqual
         advance
@@ -247,7 +257,11 @@ module SYMBOL
         case tok.type
         when TokenType::Number
           advance
-          items << AST::ExprLiteral.new(tok.value.to_f64)
+          if tok.value.includes?('.')
+            items << AST::ExprLiteral.new(tok.value.to_f64)
+          else
+            items << AST::ExprLiteral.new(tok.value.to_i64)
+          end
         when TokenType::String
           advance
           items << AST::ExprLiteral.new(tok.value)

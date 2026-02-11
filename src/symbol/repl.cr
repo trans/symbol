@@ -116,7 +116,7 @@ module SYMBOL
 
       Operators:
         Arithmetic:    + - * / % ^ (power)
-        Comparison:    = < > <= >= != ≤ ≥ ≠
+        Comparison:    == < > <= >= != ≤ ≥ ≠
         Logic/Bitwise: [+] (or)  [*] (and)  [-] (xor)  [~] (not)  ! (not)
         Aggregation:   Σ (sum)  Π (prod)  # (count)  ⌈ (max)  ⌊ (min)
         Range:         .. (inclusive, e.g. 1..5 → [1,2,3,4,5])
@@ -151,13 +151,10 @@ module SYMBOL
 
     private def format_value(value : Tacit::TacitValue) : String
       case value
+      when Int64
+        value.to_s
       when Float64
-        # Format nicely - no decimal for integers
-        if value == value.to_i64.to_f64
-          value.to_i64.to_s
-        else
-          value.to_s
-        end
+        value.to_s
       when String
         "\"#{value}\""
       when Bool

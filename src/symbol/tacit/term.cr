@@ -1,7 +1,7 @@
 module SYMBOL
   module Tacit
     # Runtime value types
-    alias TacitValue = Float64 | String | Bool | Array(TacitValue) | Nil
+    alias TacitValue = Int64 | Float64 | String | Bool | Array(TacitValue) | Nil
 
     # Result of evaluation - either a concrete value or a suspended computation
     abstract class EvalResult

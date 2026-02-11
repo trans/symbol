@@ -34,12 +34,10 @@ module SYMBOL
     when Tacit::Resolved
       value = result.value
       case value
+      when Int64
+        value.to_s
       when Float64
-        if value == value.to_i64.to_f64
-          value.to_i64.to_s
-        else
-          value.to_s
-        end
+        value.to_s
       when Array
         "[" + value.map(&.to_s).join(", ") + "]"
       else

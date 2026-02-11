@@ -37,7 +37,7 @@ module SYMBOL
 
     # Literal in expression: numbers, strings, booleans
     class ExprLiteral < ExprTerm
-      property value : Float64 | String | Bool
+      property value : Int64 | Float64 | String | Bool
 
       def initialize(@value, location = nil)
         super(location)
@@ -81,7 +81,7 @@ module SYMBOL
         # Arithmetic (binary)
         "+"  => 2, "-" => 2, "*" => 2, "/" => 2, "%" => 2,
         # Comparison (binary)
-        "="  => 2, "==" => 2, "!=" => 2, "≠" => 2,
+        "==" => 2, "!=" => 2, "≠" => 2,
         "<"  => 2, ">" => 2, "<=" => 2, ">=" => 2, "≤" => 2, "≥" => 2,
         # Logic (binary and unary)
         "&"  => 2, "|" => 2, "!" => 1,

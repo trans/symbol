@@ -146,44 +146,44 @@ module SYMBOL
         values = args.map(&.not_nil!)
 
         case suspended.op
-        # Arithmetic (with vectorization)
+        # Arithmetic (with vectorization, int-preserving)
         when "+"
-          vectorize_binary(values[0], values[1]) { |a, b| a + b }
+          vectorize_binary(values[0], values[1]) { |a, b| num_add(a, b) }
         when "-"
-          vectorize_binary(values[0], values[1]) { |a, b| a - b }
+          vectorize_binary(values[0], values[1]) { |a, b| num_sub(a, b) }
         when "*"
-          vectorize_binary(values[0], values[1]) { |a, b| a * b }
+          vectorize_binary(values[0], values[1]) { |a, b| num_mul(a, b) }
         when "/"
-          vectorize_binary(values[0], values[1]) { |a, b| b == 0 ? Float64::INFINITY : a / b }
+          vectorize_binary(values[0], values[1]) { |a, b| num_div(a, b) }
         when "%"
-          vectorize_binary(values[0], values[1]) { |a, b| a % b }
+          vectorize_binary(values[0], values[1]) { |a, b| num_mod(a, b) }
         when "^"
-          vectorize_binary(values[0], values[1]) { |a, b| a ** b }
+          vectorize_binary(values[0], values[1]) { |a, b| num_pow(a, b) }
 
         # Range
         when ".."
-          start_val = to_num(values[0]).to_i64
-          end_val = to_num(values[1]).to_i64
+          start_val = to_int(values[0])
+          end_val = to_int(values[1])
           if start_val <= end_val
-            result = (start_val..end_val).map { |n| n.to_f64.as(TacitValue) }
+            result = (start_val..end_val).map { |n| n.as(TacitValue) }
           else
-            result = (end_val..start_val).reverse_each.map { |n| n.to_f64.as(TacitValue) }.to_a
+            result = (end_val..start_val).reverse_each.map { |n| n.as(TacitValue) }.to_a
           end
           Resolved.new(result.as(TacitValue))
 
         # Comparison
-        when "=", "=="
+        when "=="
           Resolved.new(values[0] == values[1])
         when "!=", "≠"
           Resolved.new(values[0] != values[1])
         when "<"
-          Resolved.new(to_num(values[0]) < to_num(values[1]))
+          Resolved.new(to_float(values[0]) < to_float(values[1]))
         when ">"
-          Resolved.new(to_num(values[0]) > to_num(values[1]))
+          Resolved.new(to_float(values[0]) > to_float(values[1]))
         when "<=", "≤"
-          Resolved.new(to_num(values[0]) <= to_num(values[1]))
+          Resolved.new(to_float(values[0]) <= to_float(values[1]))
         when ">=", "≥"
-          Resolved.new(to_num(values[0]) >= to_num(values[1]))
+          Resolved.new(to_float(values[0]) >= to_float(values[1]))
 
         # Logic
         when "!"
@@ -192,13 +192,20 @@ module SYMBOL
         # Negation
         when "~"
           case values[0]
+          when Int64
+            Resolved.new(-values[0].as(Int64))
           when Float64
             Resolved.new(-values[0].as(Float64))
           when Array
             arr = values[0].as(Array(TacitValue))
-            Resolved.new(arr.map { |v| (-to_num(v)).as(TacitValue) }.as(TacitValue))
+            Resolved.new(arr.map { |v|
+              case v
+              when Int64 then (-v).as(TacitValue)
+              else            (-to_float(v)).as(TacitValue)
+              end
+            }.as(TacitValue))
           else
-            Resolved.new(-to_num(values[0]))
+            Resolved.new(-to_float(values[0]))
           end
 
         # Bitwise/Boolean operators (wrapped) - dispatch by type
@@ -207,58 +214,96 @@ module SYMBOL
           if values[0].is_a?(Bool) && values[1].is_a?(Bool)
             Resolved.new(values[0].as(Bool) || values[1].as(Bool))
           else
-            vectorize_binary(values[0], values[1]) { |a, b| (a.to_i64 | b.to_i64).to_f64 }
+            vectorize_binary(values[0], values[1]) { |a, b| (to_int(a) | to_int(b)).as(TacitValue) }
           end
         when "[*]"
           # Bool, Bool → boolean AND; else bitwise AND
           if values[0].is_a?(Bool) && values[1].is_a?(Bool)
             Resolved.new(values[0].as(Bool) && values[1].as(Bool))
           else
-            vectorize_binary(values[0], values[1]) { |a, b| (a.to_i64 & b.to_i64).to_f64 }
+            vectorize_binary(values[0], values[1]) { |a, b| (to_int(a) & to_int(b)).as(TacitValue) }
           end
         when "[-]"
           # Bool, Bool → boolean XOR; else bitwise XOR
           if values[0].is_a?(Bool) && values[1].is_a?(Bool)
             Resolved.new(values[0].as(Bool) != values[1].as(Bool))
           else
-            vectorize_binary(values[0], values[1]) { |a, b| (a.to_i64 ^ b.to_i64).to_f64 }
+            vectorize_binary(values[0], values[1]) { |a, b| (to_int(a) ^ to_int(b)).as(TacitValue) }
           end
         when "[~]"
           # Bool → boolean NOT; else bitwise NOT
           case values[0]
           when Bool
             Resolved.new(!values[0].as(Bool))
+          when Int64
+            Resolved.new((~values[0].as(Int64)).as(TacitValue))
           when Float64
-            Resolved.new((~values[0].as(Float64).to_i64).to_f64)
+            Resolved.new((~values[0].as(Float64).to_i64).as(TacitValue))
           when Array
             arr = values[0].as(Array(TacitValue))
             Resolved.new(arr.map { |v|
               if v.is_a?(Bool)
                 (!v.as(Bool)).as(TacitValue)
               else
-                (~to_num(v).to_i64).to_f64.as(TacitValue)
+                (~to_int(v)).as(TacitValue)
               end
             }.as(TacitValue))
           else
-            Resolved.new((~to_num(values[0]).to_i64).to_f64)
+            Resolved.new((~to_int(values[0])).as(TacitValue))
           end
 
         # Aggregation (unary - operate on arrays)
         when "Σ", "sum"
           arr = to_array(values[0])
-          Resolved.new(arr.sum { |v| to_num(v) })
+          if arr.all? { |v| v.is_a?(Int64) }
+            Resolved.new(arr.sum { |v| v.as(Int64) }.as(TacitValue))
+          else
+            Resolved.new(arr.sum { |v| to_float(v) }.as(TacitValue))
+          end
         when "Π", "prod"
           arr = to_array(values[0])
-          Resolved.new(arr.product { |v| to_num(v) })
+          if arr.all? { |v| v.is_a?(Int64) }
+            Resolved.new(arr.product { |v| v.as(Int64) }.as(TacitValue))
+          else
+            Resolved.new(arr.product { |v| to_float(v) }.as(TacitValue))
+          end
         when "#", "count"
           arr = to_array(values[0])
-          Resolved.new(arr.size.to_f64)
-        when "⌈", "max"
-          arr = to_array(values[0])
-          Resolved.new(arr.max_of { |v| to_num(v) })
-        when "⌊", "min"
-          arr = to_array(values[0])
-          Resolved.new(arr.min_of { |v| to_num(v) })
+          Resolved.new(arr.size.to_i64.as(TacitValue))
+        when "⌈"
+          # Multi-dispatch: scalar → ceiling, array → max
+          case values[0]
+          when Int64
+            Resolved.new(values[0])
+          when Float64
+            Resolved.new(values[0].as(Float64).ceil.to_i64.as(TacitValue))
+          when Array
+            arr = values[0].as(Array(TacitValue))
+            if arr.all? { |v| v.is_a?(Int64) }
+              Resolved.new(arr.max_of { |v| v.as(Int64) }.as(TacitValue))
+            else
+              Resolved.new(arr.max_of { |v| to_float(v) }.as(TacitValue))
+            end
+          else
+            Resolved.new(to_float(values[0]).ceil.to_i64.as(TacitValue))
+          end
+        when "⌊"
+          # Multi-dispatch: scalar → floor, array → min
+          case values[0]
+          when Int64
+            Resolved.new(values[0])
+          when Float64
+            Resolved.new(values[0].as(Float64).floor.to_i64.as(TacitValue))
+          when Array
+            arr = values[0].as(Array(TacitValue))
+            if arr.all? { |v| v.is_a?(Int64) }
+              Resolved.new(arr.min_of { |v| v.as(Int64) }.as(TacitValue))
+            else
+              Resolved.new(arr.min_of { |v| to_float(v) }.as(TacitValue))
+            end
+          else
+            Resolved.new(to_float(values[0]).floor.to_i64.as(TacitValue))
+          end
 
         # Structural operators
         when "><"  # concat
@@ -375,7 +420,7 @@ module SYMBOL
           Resolved.new(result.as(TacitValue))
 
         when "↑"  # take (1-indexed, negative from end)
-          n = to_num(values[0]).to_i32
+          n = to_int(values[0]).to_i32
           arr = to_array(values[1])
           if n >= 0
             result = arr[0, {n, arr.size}.min]?
@@ -385,7 +430,7 @@ module SYMBOL
           Resolved.new((result || [] of TacitValue).as(TacitValue))
 
         when "↓"  # drop (1-indexed, negative from end)
-          n = to_num(values[0]).to_i32
+          n = to_int(values[0]).to_i32
           arr = to_array(values[1])
           if n >= 0
             result = arr[{n, arr.size}.min..]?
@@ -395,7 +440,7 @@ module SYMBOL
           Resolved.new((result || [] of TacitValue).as(TacitValue))
 
         when "@"  # index (1-indexed, negative from end)
-          n = to_num(values[0]).to_i32
+          n = to_int(values[0]).to_i32
           arr = to_array(values[1])
           if n > 0
             Resolved.new(arr[n - 1]?)
@@ -432,35 +477,85 @@ module SYMBOL
       end
 
       # Vectorize a binary operation over arrays
-      private def vectorize_binary(left : TacitValue, right : TacitValue, &block : (Float64, Float64) -> Float64) : EvalResult
+      private def vectorize_binary(left : TacitValue, right : TacitValue, &block : (TacitValue, TacitValue) -> TacitValue) : EvalResult
         case {left, right}
         when {Array, Array}
-          # Element-wise operation
           larr = left.as(Array(TacitValue))
           rarr = right.as(Array(TacitValue))
-          # Zip with shorter length, or could pad - for now, zip
-          result = larr.zip(rarr).map { |(l, r)| block.call(to_num(l), to_num(r)).as(TacitValue) }
+          result = larr.zip(rarr).map { |(l, r)| block.call(l, r) }
           Resolved.new(result.as(TacitValue))
         when {Array, _}
-          # Map scalar over array
           arr = left.as(Array(TacitValue))
-          scalar = to_num(right)
-          result = arr.map { |v| block.call(to_num(v), scalar).as(TacitValue) }
+          result = arr.map { |v| block.call(v, right) }
           Resolved.new(result.as(TacitValue))
         when {_, Array}
-          # Map scalar over array
-          scalar = to_num(left)
           arr = right.as(Array(TacitValue))
-          result = arr.map { |v| block.call(scalar, to_num(v)).as(TacitValue) }
+          result = arr.map { |v| block.call(left, v) }
           Resolved.new(result.as(TacitValue))
         else
-          # Scalar operation
-          Resolved.new(block.call(to_num(left), to_num(right)))
+          Resolved.new(block.call(left, right))
         end
       end
 
-      private def to_num(v : TacitValue) : Float64
+      # Integer-preserving arithmetic helpers
+      private def num_add(a : TacitValue, b : TacitValue) : TacitValue
+        if a.is_a?(Int64) && b.is_a?(Int64)
+          (a + b).as(TacitValue)
+        else
+          (to_float(a) + to_float(b)).as(TacitValue)
+        end
+      end
+
+      private def num_sub(a : TacitValue, b : TacitValue) : TacitValue
+        if a.is_a?(Int64) && b.is_a?(Int64)
+          (a - b).as(TacitValue)
+        else
+          (to_float(a) - to_float(b)).as(TacitValue)
+        end
+      end
+
+      private def num_mul(a : TacitValue, b : TacitValue) : TacitValue
+        if a.is_a?(Int64) && b.is_a?(Int64)
+          (a * b).as(TacitValue)
+        else
+          (to_float(a) * to_float(b)).as(TacitValue)
+        end
+      end
+
+      private def num_div(a : TacitValue, b : TacitValue) : TacitValue
+        if a.is_a?(Int64) && b.is_a?(Int64)
+          return Float64::INFINITY.as(TacitValue) if b == 0
+          if a % b == 0
+            a // b
+          else
+            a.to_f64 / b.to_f64
+          end
+        else
+          fb = to_float(b)
+          return Float64::INFINITY.as(TacitValue) if fb == 0.0
+          (to_float(a) / fb).as(TacitValue)
+        end
+      end
+
+      private def num_mod(a : TacitValue, b : TacitValue) : TacitValue
+        if a.is_a?(Int64) && b.is_a?(Int64)
+          (a % b).as(TacitValue)
+        else
+          (to_float(a) % to_float(b)).as(TacitValue)
+        end
+      end
+
+      private def num_pow(a : TacitValue, b : TacitValue) : TacitValue
+        if a.is_a?(Int64) && b.is_a?(Int64) && b >= 0
+          (a ** b).as(TacitValue)
+        else
+          (to_float(a) ** to_float(b)).as(TacitValue)
+        end
+      end
+
+      private def to_float(v : TacitValue) : Float64
         case v
+        when Int64   then v.to_f64
         when Float64 then v
         when String  then v.to_f64? || 0.0
         when Bool    then v ? 1.0 : 0.0
@@ -469,8 +564,20 @@ module SYMBOL
         end
       end
 
+      private def to_int(v : TacitValue) : Int64
+        case v
+        when Int64   then v
+        when Float64 then v.to_i64
+        when String  then v.to_i64? || 0_i64
+        when Bool    then v ? 1_i64 : 0_i64
+        when Array   then v.size.to_i64
+        else              0_i64
+        end
+      end
+
       private def to_bool(v : TacitValue) : Bool
         case v
+        when Int64   then v != 0
         when Float64 then v != 0.0
         when String  then !v.empty?
         when Bool    then v
