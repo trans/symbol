@@ -1,2 +1,2 @@
 require "spec"
-require "../src/symbol"
+require "../src/symbols"
